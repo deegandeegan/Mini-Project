@@ -7,3 +7,4 @@ Another thing: make sure you are using the same language, same tool together. (d
 Since it is only a miniproject. Please don't too much time on the details and just make the main part correct. We will also go over it this week. Hope it helps.
 
 ###  Our goal is to try to predict fight winner based off the predictors available.
+Winner is the response column. If you look at the data, it is all split between the red fighter and the blue fight.
