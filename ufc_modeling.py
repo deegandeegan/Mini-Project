@@ -20,6 +20,8 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import f1_score, accuracy_score
 from sklearn.ensemble import RandomForestClassifier
 from sklearn import metrics
+from sklearn.metrics import roc_curve, auc
+from matplotlib.legend_handler import HandlerLine2D
 
 ufc_official = pd.read_csv("/Users/aidanosullivan/Desktop/UCLA_Extension/Mini_Project/MiniProject_Final/ufc_offical.csv")
 
@@ -80,18 +82,20 @@ scaler = StandardScaler()
 x_train1 = scaler.fit_transform(x_train1)
 x_test1 = scaler.transform(x_test1)
 #we'll also rerun feature selection, in hope that we will get fewer predictors
-rfecv = RFECV(estimator = RandomForestClassifier(), cv = 10, step =1)
+rfecv = RFECV(estimator = RandomForestClassifier(), cv = 5, step = 1)
 rfecv = rfecv.fit(x_train1, y_train1.values.ravel())
 g  = rfecv.get_support(1)
-
+len(g)
 #fuck we now have wayyy more predictors - all 69 to be exact
 #let's NOT use g
+good_preds = np.array([0,1,2,4,28,40,47,53,54,55,56])
+
 #subset x_train1 by the good predictors
 x_train1 = pd.DataFrame(x_train1)
 x_train1 = x_train1[x_train1.columns[f]]
 #create another object of class random forest classifier, this time with more trees
 #also i'll change the max_depth, and the max_features (which is like mtry in R)
-rf = RandomForestClassifier(n_estimators = 2000, random_state = 42, max_depth = 10, max_features=int(math.sqrt(len(f))))
+rf = RandomForestClassifier(n_estimators = 2000, random_state = 42, max_depth = 14, max_features=int(math.sqrt(len(f))))
 rf.fit(x_train, y_train.values.ravel())
 #predict the y_train1 labels to get the training error
 y_train_pred1 = rf.predict(x_train1)
@@ -106,3 +110,81 @@ print('testing set accuracy %2.2f' % (accuracy_score(y_test1, y_test_predict1)*1
 print("testing set f1 %2.2f" % (f1_score(y_test1, y_test_predict1)*100))
 #final testing error is 83.23% - not bad for a little tweeking. more will come
 
+#let's check the AUC score, to get another metric that we are doing the right thing
+false_positive_rate, true_positive_rate, threshold = roc_curve(y_test1, y_test_predict1)
+roc_auc = auc(false_positive_rate, true_positive_rate)
+print('ROC AUC score = %2.2f' % (roc_auc*100) + '%')
+#as of now, 87%
+
+
+#Let's try to print the variance important plots
+for name, importance in zip(x_test1, rf.feature_importances_):
+    print(name, "=", importance)
+    
+importances = rf.feature_importances_
+indices = np.argsort(importances)
+
+#this is a plot to show feature importance
+plt.title('Feature Importances')
+plt.barh(range(len(indices)), importances[indices], color='b', align='center')
+plt.yticks(range(len(indices)), features['indices'])
+plt.xlabel('Relative Importance')
+plt.show()
+
+
+
+
+#instead of messing around with all the individual parameters of random forest,
+#let's try to make some graphs that show the opitimal 
+n_estimators = [1,2,4,20,50,100, 200, 500, 1000, 1500]
+train_results = []
+test_results = []
+for estimator in n_estimators:
+    rf_trees = RandomForestClassifier(n_estimators=estimator, n_jobs = -1)
+    rf_trees.fit(x_train1, y_train1.values.ravel())
+    
+    train_pred = rf_trees.predict(x_train1)
+    false_positive_rate, true_positive_rate, threshold = roc_curve(y_train1, train_pred)
+    roc_auc = auc(false_positive_rate, true_positive_rate)
+    train_results.append(roc_auc)
+    
+    y_pred = rf_trees.predict(x_test1)
+    false_positive_rate, true_positive_rate, threshold = roc_curve(y_test1, y_pred)
+    roc_auc = auc(false_positive_rate, true_positive_rate)
+    test_results.append(roc_auc)
+
+
+ 
+line1 = plt.plot(n_estimators, train_results, color = 'blue', label = 'Train AUC')
+line2 = plt.plot(n_estimators, test_results, color = 'red', label = 'Test AUC')
+plt.legend(handler_map={line1: HandlerLine2D(numpoints=2)})
+plt.ylabel("AUC score")
+plt.xlabel("n_estimators")
+plt.show() 
+
+#1000 trees is definitely good enough
+
+#now let's check what is the best max_depth 
+max_depth = np.linspace(1,32,32, endpoint = True)
+train_results = []
+test_results = []
+for depths in max_depth:
+    rf_trees = RandomForestClassifier(max_depth = depths, n_jobs = 42, n_estimators=1000)
+    rf_trees.fit(x_train1, y_train1.values.ravel())
+    
+    train_pred = rf_trees.predict(x_train1)
+    false_positive_rate, true_positive_rate, threshold = roc_curve(y_train1, train_pred)
+    roc_auc = auc(false_positive_rate, true_positive_rate)
+    train_results.append(roc_auc)
+    
+    y_pred = rf_trees.predict(x_test1)
+    false_positive_rate, true_positive_rate, threshold = roc_curve(y_test1, y_pred)
+    roc_auc = auc(false_positive_rate, true_positive_rate)
+    test_results.append(roc_auc)
+    
+line1 = plt.plot(max_depth, train_results, color = 'blue', label = 'Train AUC')
+line2 = plt.plot(max_depth, test_results, color = 'red', label = 'Test AUC')
+plt.legend(handler_map={line1: HandlerLine2D(numpoints=2)})
+plt.ylabel("AUC score")
+plt.xlabel("Max Depth")
+plt.show() 
